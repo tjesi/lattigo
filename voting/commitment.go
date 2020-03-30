@@ -9,15 +9,6 @@ import (
 // LogN is the log2 of the supported polynomial modulus degree.
 const LogN = 10
 
-// N is supported polynomial modulus degree.
-const N = int(1 << LogN)
-const P = 2490062849
-const Sigma = 46000
-const n = 3
-const v = 36
-const k = 3
-const beta = 1
-
 type committer struct {
 	params     *Parameters
 	context    *ring.Context
@@ -46,8 +37,8 @@ func testNorm(com *committer, r *ring.Poly) bool {
 			sum = sum + r.Coeffs[i][j]
 		}
 	}
-	sigma := 11 * v * beta * math.Sqrt(float64(k * N))
-	return math.Sqrt(float64(sum)) < 4 * sigma * math.Sqrt(float64(N))
+	sigma := 11 * float64(com.params.v) * float64(com.params.beta) * math.Sqrt(float64(com.params.k * com.params.N))
+	return math.Sqrt(float64(sum)) < 4 * sigma * math.Sqrt(float64(com.params.N))
 }
 
 func NewCommitter(params *Parameters) *committer {
@@ -94,7 +85,7 @@ func Sample(com *committer) []*ring.Poly {
 			panic("crypto rand error")
 		}
 		var bits []uint64
-		for j := 0; j < N / 8; j++ {
+		for j := 0; j < int(com.params.N) / 8; j++ {
 			bits = append(bits, byteToBits(bytes[j])...)
 		}
 		com.context.SetCoefficientsUint64(bits, randomness[i])
