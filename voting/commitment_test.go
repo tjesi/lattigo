@@ -11,20 +11,21 @@ func TestCommitment(t *testing.T) {
 	key := KeyGen(com)
 	m := com.context.NewUniformPoly()
 	rho := com.context.NewUniformPoly()
+	challenge := SampleChallenge(com)
 
 	identity := com.context.NewPoly()
 	com.context.SetCoefficientsUint64([]uint64{1}, identity)
 
 	r := Sample(com)
 	z0 := Commit(com, m, key, r)
-	fmt.Println("Valid commitment can be opened:", Open(com, m, key, z0, r));
+	fmt.Println("Valid commitment can be opened:", Open(com, m, key, z0, r, challenge));
 	com.context.Sub(m, identity, m)
-	fmt.Println("Invalid commitment cannot be opened:", !Open(com, m, key, z0, r));
+	fmt.Println("Invalid commitment cannot be opened:", !Open(com, m, key, z0, r, challenge));
 
 	zero := Sample(com)
 	for k := 0; k < 3; k++ {
 		for i := range com.context.Modulus {
-			for j := uint64(0); j < com.params.N; j++ {
+			for j := 0; j < com.params.N; j++ {
 				zero[k].Coeffs[i][j] = 0
 			}
 		}
@@ -36,7 +37,7 @@ func TestCommitment(t *testing.T) {
 	com.context.Sub(z0[1], z1[1], z0[1]);
 	com.context.Sub(m, rho, m)
 
-	fmt.Println("Commitment is linearly homomorphic:", Open(com, m, key, z0, r));
+	fmt.Println("Commitment is linearly homomorphic:", Open(com, m, key, z0, r, challenge));
 }
 
 func BenchmarkCommit(b *testing.B) {
@@ -61,6 +62,7 @@ func BenchmarkOpen(b *testing.B) {
 	key := KeyGen(com)
 	randomness := Sample(com)
 	message := com.context.NewUniformPoly()
+	challenge := SampleChallenge(com)
 
 	identity := com.context.NewPoly()
 	com.context.SetCoefficientsUint64([]uint64{1}, identity)
@@ -69,6 +71,6 @@ func BenchmarkOpen(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < int(com.params.N); i++ {
-		Open(com, message, key, z0, randomness)
+		Open(com, message, key, z0, randomness, challenge)
 	}
 }

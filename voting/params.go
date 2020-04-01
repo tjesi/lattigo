@@ -7,21 +7,21 @@ import (
 // Parameters is a struct storing test parameters for the package Comm.
 type Parameters struct {
 	// LogN is the log2 of the supported polynomial modulus degree.
-	LogN      uint64
+	LogN      int
 	// N is supported polynomial modulus degree.
-	N         uint64
-	//Prime modulus for the NTT
+	N         int
+	//Prime modulus
 	Modulus   uint64
 	//Standard deviation of discrete Gaussians
 	Sigma     uint64
 	//Height of the commitment matrix
-	n         uint64
+	n         int
 	//Width (overRq) of the commitment matrices
-	k         uint64
+	k         int
 	//Maximum l1-norm of elements
-	v         uint64
+	v         int
 	//∞-norm bound of certain elements
-	beta      uint64
+	beta      int
 }
 
 // MaxLogN is the log2 of the largest supported polynomial modulus degree.
@@ -31,17 +31,17 @@ const MaxLogN = 16
 var DefaultParams = []*Parameters{
 	{LogN: 10,
 		N: 1024,
-		Modulus: 2490062849,
+		Modulus: 2846328833,
 		Sigma: 46000,
 		k: 3,
-		n: 3,
+		n: 1,
 		v: 36,
 		beta: 1,
 	},
 }
 
 // Generates a new set of parameters from the input parameters.
-func NewParameters(LogN, N, Modulus, Sigma, k, n, v, beta uint64) (params *Parameters) {
+func NewParameters(LogN, N int, Modulus uint64, Sigma uint64, k, n, v, beta int) (params *Parameters) {
 
 	if LogN > MaxLogN {
 		panic(fmt.Errorf("cannot NewParametersFromLogModuli: LogN is larger than %d", MaxLogN))

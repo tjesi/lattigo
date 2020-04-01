@@ -1,8 +1,9 @@
 package commitment
 
 import (
-	"math"
+	"math/big"
 	"crypto/rand"
+	"encoding/binary"
 	"github.com/ldsec/lattigo/ring"
 )
 
@@ -23,22 +24,30 @@ func setup(params *Parameters) *ring.Context {
 	var err error
 	var context *ring.Context
 
-	if context, err = ring.NewContextWithParams(params.N, []uint64{params.Modulus}); err != nil {
+	if context, err = ring.NewContextWithParams(uint64(params.N), []uint64{params.Modulus}); err != nil {
 		panic(err)
 	}
 
 	return context
 }
 
-func testNorm(com *committer, r *ring.Poly) bool {
-	sum := uint64(0);
+func l2Norm(com *committer, r *ring.Poly) *big.Int {
+	sum := big.NewInt(0)
+	poly := make([]*big.Int, com.context.N)
+	com.context.PolyToBigint(r, poly)
+
 	for i := range com.context.Modulus {
-		for j := uint64(0); j < com.params.N; j++ {
-			sum = sum + r.Coeffs[i][j]
-		}
+		sum = sum.Add(sum, poly[i].Mul(poly[i], poly[i]))
 	}
-	sigma := 11 * float64(com.params.v) * float64(com.params.beta) * math.Sqrt(float64(com.params.k * com.params.N))
-	return math.Sqrt(float64(sum)) < 4 * sigma * math.Sqrt(float64(com.params.N))
+	return sum
+}
+
+func testNorm(com *committer, r *ring.Poly) bool {
+	sum := l2Norm(com, r)
+
+	// Actually compute sigma^2 to simplify comparison
+	//sigma := 11 * 11 * (com.params.v * com.params.v) * (com.params.beta * com.params.beta) * com.params.k * com.params.N
+	return sum.Uint64() * sum.Uint64() <= (16 * uint64(com.params.Sigma * uint64(com.params.N)))
 }
 
 func NewCommitter(params *Parameters) *committer {
@@ -75,22 +84,49 @@ func KeyGen(com *committer) (*PublicKey) {
 }
 
 func Sample(com *committer) []*ring.Poly {
-	bytes := make([]byte, com.params.N / 8)
+	coeffs := make([]uint64, com.params.N)
+	bytes := make([]byte, 8)
 	var randomness = []*ring.Poly {
 		com.context.NewPoly(), com.context.NewPoly(), com.context.NewPoly(),
 	}
 
-	for i := 0; i < 3; i++ {
-		if _, err := rand.Read(bytes); err != nil {
-			panic("crypto rand error")
+	for i := 0; i < com.params.k; i++ {
+		for j := 0; j < com.params.N; j++ {
+			if _, err := rand.Read(bytes); err != nil {
+				panic("crypto rand error")
+			}
+			coeffs[j] = binary.LittleEndian.Uint64(bytes) % 2
 		}
-		var bits []uint64
-		for j := 0; j < int(com.params.N) / 8; j++ {
-			bits = append(bits, byteToBits(bytes[j])...)
-		}
-		com.context.SetCoefficientsUint64(bits, randomness[i])
+		com.context.SetCoefficientsUint64(coeffs, randomness[i])
 	}
 	return randomness
+}
+
+func SampleChallenge(com *committer) *ring.Poly {
+	coeffs := make([]uint64, com.params.N)
+	challenge := com.context.NewPoly()
+	var c = []*ring.Poly {
+		com.context.NewPoly(), com.context.NewPoly(),
+	}
+
+	for com.context.Equal(c[0], c[1]) == true {
+		for j := 0; j < 2; j++ {
+			for i := 0; i < com.params.N; i++ {
+				coeffs[i] = 0
+			}
+			for i := 0; i < com.params.v; i++ {
+				bytes := make([]byte, 8)
+				if _, err := rand.Read(bytes); err != nil {
+					panic("crypto rand error")
+				}
+				coeffs[binary.LittleEndian.Uint64(bytes) % uint64(com.params.N)] = 1
+			}
+			com.context.SetCoefficientsUint64(coeffs, c[j])
+		}
+	}
+
+	com.context.Sub(c[0], c[1], challenge)
+	return challenge
 }
 
 func Commit(com *committer, m *ring.Poly, key *PublicKey, r []*ring.Poly) []*ring.Poly {
@@ -108,7 +144,10 @@ func Commit(com *committer, m *ring.Poly, key *PublicKey, r []*ring.Poly) []*rin
 	return []*ring.Poly { c1, c2 }
 }
 
-func Open(com *committer, m *ring.Poly, key *PublicKey, c []*ring.Poly, r []*ring.Poly) bool {
+func Open(com *committer, m *ring.Poly, key *PublicKey, c []*ring.Poly, r []*ring.Poly, f *ring.Poly) bool {
+	identity := com.context.NewPoly()
+	com.context.SetCoefficientsUint64([]uint64{1}, identity)
+
 	t := com.context.NewPoly()
 	t1 := com.context.NewPoly()
 	t2 := com.context.NewPoly()
@@ -120,6 +159,6 @@ func Open(com *committer, m *ring.Poly, key *PublicKey, c []*ring.Poly, r []*rin
 	}
 	com.context.Add(t2, m, t2)
 
-	return com.context.Equal(c[0], t1) && com.context.Equal(c[1], t2) &&
-	    testNorm(com, r[0]) && testNorm(com, r[1]) && testNorm(com, r[2])
+	return testNorm(com, r[0]) && testNorm(com, r[1]) && testNorm(com, r[2]) &&  com.context.Equal(c[0], t1) && com.context.Equal(c[1], t2)
+
 }
