@@ -70,8 +70,3 @@ func (s2e *S2EProtocol) Reencrypt(shareAgg *S2EReencryptionShare, crs *ring.Poly
 
 	return
 }
-
-// Utility method
-func (s2e *S2EProtocol) NewUniformAdditiveShare() *AdditiveShare {
-	return NewUniformAdditiveShare(s2e.cks.context.params.LogN, s2e.cks.context.params.T)
-}
