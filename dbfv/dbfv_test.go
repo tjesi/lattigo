@@ -721,15 +721,15 @@ func testEncToShares(t *testing.T) {
 				p.proto.GenSharesSlave(p.sk, cipher, p.decShare, p.addShare)
 				P0.proto.AggregateDecryptionShares(P0.decShare, p.decShare, P0.decShare)
 
-				P0.proto.SumAdditiveShares(shareSum, p.addShare, shareSum)
+				SumAdditiveShares(shareSum, p.addShare, shareSum)
 			}
 
 			// The master runs the protocol, and contributes to the sum of the additive shares
 			P0.proto.GenShareMaster(P0.sk, cipher, P0.decShare, P0.addShare)
-			P0.proto.SumAdditiveShares(shareSum, P0.addShare, shareSum)
+			SumAdditiveShares(shareSum, P0.addShare, shareSum)
 
 			// Verifies that msg = shareSum
-			if !shareSum.Equal(msg) {
+			if !shareSum.EqualSlice(msg) {
 				t.Fail()
 			}
 		})
@@ -777,7 +777,7 @@ func testSharesToEnc(t *testing.T) {
 			for _, p := range parties {
 				// Build the msg
 				p.addShare.elem = testCtx.contextT.NewUniformPoly()
-				p.otherProto.SumAdditiveShares(msg, p.addShare, msg)
+				SumAdditiveShares(msg, p.addShare, msg)
 
 				// Aggregate re-encryption shares
 				p.proto.GenShare(p.sk, crs, p.addShare, p.reencShare)
@@ -789,7 +789,7 @@ func testSharesToEnc(t *testing.T) {
 			decoded := testCtx.encoder.DecodeUint(plain)
 
 			// Verifies that msg = decoded
-			if !msg.Equal(decoded) {
+			if !msg.EqualSlice(decoded) {
 				t.Fail()
 			}
 		})

@@ -11,7 +11,6 @@ package dbfv
 import (
 	"github.com/ldsec/lattigo/bfv"
 	"github.com/ldsec/lattigo/ring"
-	"sync"
 )
 
 //E2SProtocol contains all the parameters needed to perform the various steps of the protocol.
@@ -33,16 +32,9 @@ type E2SDecryptionShare struct {
 	CKSShare
 }
 
-// TODO: when is a MarshalBinary needed?
 // UnmarshalBinary decodes a previously marshaled share on the target share.
 func (share *E2SDecryptionShare) UnmarshalBinary(data []byte) error {
 	return (&share.CKSShare).UnmarshalBinary(data)
-}
-
-//AdditiveShare represents the additive share of the plaintext the party possesses after running the protocol.
-//The additive shares are elements of Z_t^n, and add up to the original clear vector, not to its plaintext-encoding.
-type AdditiveShare struct {
-	elem *ring.Poly
 }
 
 //NewE2SProtocol allocates a protocol struct
@@ -70,7 +62,7 @@ func (e2s *E2SProtocol) AllocateDecShare() *E2SDecryptionShare {
 
 // AllocateAddShare allocates only an additive share.
 func (e2s *E2SProtocol) AllocateAddShare() *AdditiveShare {
-	return &AdditiveShare{e2s.cks.context.contextT.NewPoly()}
+	return NewAdditiveShare(e2s.cks.context.params.LogN, e2s.cks.context.params.T)
 }
 
 // GenSharesSlave is to be called by slaves to generate both the decryption share and the additive share.
@@ -112,74 +104,4 @@ func (e2s *E2SProtocol) GenShareMaster(sk *bfv.SecretKey, ct *bfv.Ciphertext, de
 //AggregateDecryptionShares pretty much describes itself. It is safe to have shareOut coincide with share1 or share2.
 func (e2s *E2SProtocol) AggregateDecryptionShares(share1, share2, shareOut *E2SDecryptionShare) {
 	e2s.cks.context.contextQ.Add(share1.Poly, share2.Poly, shareOut.Poly)
-}
-
-/******** Operations on additive shares********/
-
-// SumAdditiveShares describes itself. It is safe to have shareOut coincide with either share1 or share2.
-func (e2s *E2SProtocol) SumAdditiveShares(share1, share2, shareOut *AdditiveShare) {
-	e2s.cks.context.contextT.Add(share1.elem, share2.elem, shareOut.elem)
-}
-
-// Equal compares coefficient-wise
-func (x *AdditiveShare) Equal(m []uint64) bool {
-	xcoeffs := x.elem.GetCoefficients()[0]
-
-	if len(xcoeffs) != len(m) {
-		return false
-	}
-
-	for i := range xcoeffs {
-		if xcoeffs[i] != m[i] {
-			return false
-		}
-	}
-
-	return true
-}
-
-// GetCoeffs returns the coefficients (not copied)
-func (x *AdditiveShare) GetCoeffs() []uint64 {
-	return x.elem.Coeffs[0]
-}
-
-/******** Useful for tests ********/
-
-// Various goroutines, each running the protocol as a node, need to provide their AdditiveShare to
-// a common accumulator. The last one unlocks "done", awaking the master thread.
-type ConcurrentAdditiveShareAccum struct {
-	*sync.Mutex
-	*AdditiveShare
-	proto   *E2SProtocol // TODO: replace with context
-	missing int
-	done    *sync.Mutex
-}
-
-func NewConcurrentAdditiveShareAccum(params *bfv.Parameters, sigmaSmudging float64, nbParties int) *ConcurrentAdditiveShareAccum {
-	proto := NewE2SProtocol(params, sigmaSmudging)
-	c := &ConcurrentAdditiveShareAccum{
-		Mutex:         &sync.Mutex{},
-		AdditiveShare: proto.AllocateAddShare(),
-		proto:         proto,
-		missing:       nbParties,
-		done:          &sync.Mutex{},
-	}
-
-	c.done.Lock()
-	return c
-}
-
-func (accum *ConcurrentAdditiveShareAccum) Accumulate(share *AdditiveShare) {
-	accum.Lock()
-	defer accum.Unlock()
-
-	accum.proto.SumAdditiveShares(accum.AdditiveShare, share, accum.AdditiveShare)
-	accum.missing -= 1
-	if accum.missing == 0 {
-		accum.done.Unlock()
-	}
-}
-
-func (accum *ConcurrentAdditiveShareAccum) WaitDone() {
-	accum.done.Lock()
 }
